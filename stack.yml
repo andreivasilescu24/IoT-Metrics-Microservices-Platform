@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  mosquitto-broker:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    deploy:
+      replicas: 1
+    networks:
+      - network_mosquitto
+
+  adapter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: adapter
+    environment:
+      DEBUG_DATA_FLOW: true
+    depends_on:
+      - mosquitto-broker
+      - influxdb
+    deploy:
+      replicas: 1
+    networks:
+      - network_mosquitto
+      - network_influx
+
+  influxdb:
+    image: influxdb:latest
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${DB_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${DB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${DB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${DB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${DB_TOKEN}
+    deploy:
+      replicas: 1
+    networks:
+      - network_db_grafana
+      - network_influx
+
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    ports:
+      - "80:3000"
+    depends_on:
+      - influxdb
+    volumes:
+      - grafana_storage:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD}
+    deploy:
+      replicas: 1
+    networks:
+      - network_db_grafana
+
+volumes:
+  mosquitto_config:
+  mosquitto_data:
+  mosquitto_log:
+  influxdb_data:
+  influxdb_config:
+  grafana_storage:
+
+networks:
+  network_db_grafana:
+  network_mosquitto:
+  network_influx:
